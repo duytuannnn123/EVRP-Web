@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("EVRP_Web")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3fa5d3429d4c10e6703c2b7721cf56757ee295e2")]
 [assembly: System.Reflection.AssemblyProductAttribute("EVRP_Web")]
 [assembly: System.Reflection.AssemblyTitleAttribute("EVRP_Web")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
