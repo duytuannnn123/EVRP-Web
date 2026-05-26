@@ -1,0 +1,18 @@
+
+ĐÃ SỬA:
+
+1. FIX ROUTE /Admin
+2. FIX /Admin/Routing
+3. FIX /Admin/Management
+4. FIX AddCustomer
+5. FIX AddDriver
+6. FIX Routing View Model
+7. FIX Async Await
+8. FIX EF Core AsNoTracking
+9. FIX SaveChangesAsync
+10. FIX Broken Navigation
+11. FIX 404 ROUTE
+12. FIX Internal Server Error
+13. FIX ALNS return model
+
+Controller đã được viết lại hoàn chỉnh.

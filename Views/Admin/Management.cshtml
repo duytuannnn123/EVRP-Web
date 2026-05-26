@@ -1,0 +1,138 @@
+@using EVRP_Web.Models
+@{
+    ViewData["Title"] = "Quản lý Danh Mục Đối Tác";
+    var nodes = ViewBag.Nodes as IEnumerable<EVRP_Web.Models.Node> ?? new List<Node>();
+    var drivers = ViewBag.Drivers as IEnumerable<EVRP_Web.Models.Driver> ?? new List<Driver>();
+    var customers = ViewBag.Customers as IEnumerable<EVRP_Web.Models.Customer> ?? new List<Customer>();
+}
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<style>
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; text-align: left; }
+    .picking-location { cursor: crosshair !important; }
+</style>
+
+<div class="container-fluid mt-4 px-4 text-start">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-database text-primary me-2"></i>Hệ Thống Quản Lý Danh Mục Đối Tác & Hạ Tầng</h2>
+        <a asp-controller="Admin" asp-action="Routing" class="btn btn-success shadow-sm fw-bold"><i class="fas fa-map-marked-alt me-1"></i> Sang Bản Đồ Điều Phối Lộ Trình</a>
+    </div>
+
+    <div id="mapPickingAlert" class="alert alert-warning d-none align-items-center justify-content-between shadow-sm mb-3 py-2 animate__animated animate__fadeIn" role="alert">
+        <div><i class="fas fa-map-marker-alt text-danger me-2 animate__animated animate__flash animate__infinite"></i><strong>Chế độ chọn vị trí:</strong> Vui lòng click chuột vào một vị trí bất kỳ trên bản đồ Vinh.</div>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelMapPicking()">Hủy chọn</button>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-5 order-lg-2 mb-4">
+            <div class="card shadow-sm border-0 rounded-3">
+                <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center"><span><i class="fas fa-map me-2 text-success"></i>Bản đồ hạ tầng đô thị Vinh</span><span id="mapBadgeState" class="badge bg-secondary p-1 small fw-normal">Chế độ xem</span></div>
+                <div class="card-body p-2"><div id="adminMap" style="height: 650px; border-radius: 10px;"></div></div>
+            </div>
+        </div>
+
+        <div class="col-lg-7 order-lg-1">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center fw-bold"><span><i class="fas fa-id-card me-2"></i>1. Quản lý Đội xe điện & Tài xế</span><button class="btn btn-light btn-sm fw-bold text-primary" data-bs-toggle="modal" data-bs-target="#modalAddDriver"><i class="fas fa-plus"></i> Thêm Tài Xế</button></div>
+                <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                    <table class="table table-hover table-striped m-0 align-middle">
+                        <thead class="table-light sticky-top"><tr><th>Họ tên</th><th>SĐT</th><th>Biển số xe</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+                        <tbody>
+                            @foreach (var d in drivers) {
+                                <tr><td class="fw-bold">@d.Name</td><td class="small">@d.Phone</td><td><span class="badge bg-info text-dark">@d.VehicleLicense</span></td><td><span class="badge @(d.IsActive ? "bg-success" : "bg-secondary")">@(d.IsActive ? "Sẵn sàng" : "Bận")</span></td><td><button class="btn btn-link text-warning p-0 me-2" onclick="openEditDriverModal('@d.Id', '@d.Name', '@d.Phone', '@d.VehicleLicense', '@d.IsActive.ToString().ToLower()')"><i class="fas fa-edit"></i></button><a asp-action="DeleteDriver" asp-route-id="@d.Id" class="text-danger" onclick="return confirm('Xóa tài xế này?')"><i class="fas fa-trash"></i></a></td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center fw-bold"><span><i class="fas fa-shopping-cart me-2"></i>2. Danh mục Khách hàng thương mại</span><button class="btn btn-light btn-sm fw-bold text-danger" onclick="startMapPicking()"><i class="fas fa-map-pin me-1"></i> Chọn vị trí trên Map</button></div>
+                <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
+                    <table class="table table-hover table-striped m-0 align-middle">
+                        <thead class="table-light sticky-top">
+                            <tr><th>Khách hàng</th><th>Địa chỉ</th><th>Trạng thái giao</th><th>Thời gian</th><th>Thao tác</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in customers) {
+                                <tr>
+                                    <td class="fw-bold text-dark">@c.Name<br/><span class="badge bg-warning text-dark mt-1">@c.Demand kg</span></td>
+                                    <td class="small">@c.Address</td>
+                                    <td>
+                                        @if(c.IsDelivered) {
+                                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Đã giao</span>
+                                        } else {
+                                            <span class="badge bg-secondary"><i class="fas fa-clock me-1"></i>Chưa giao</span>
+                                        }
+                                    </td>
+                                    <td class="small font-monospace fw-bold text-primary">@(c.ActualDeliveryTime ?? "--:--")</td>
+                                    <td><button class="btn btn-link text-warning p-0 me-2" onclick="openEditCustomerModal('@c.Id', '@c.Name', '@c.Address', '@c.Latitude', '@c.Longitude', '@c.Demand', '@c.TimeWindow')"><i class="fas fa-edit"></i></button><a asp-action="DeleteCustomer" asp-route-id="@c.Id" class="text-danger" onclick="return confirm('Xóa khách hàng này?')"><i class="fas fa-trash"></i></a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center fw-bold"><span><i class="fas fa-warehouse me-2"></i>3. Hạ tầng Kho tổng & Trạm sạc</span><button class="btn btn-light btn-sm fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#modalAddNode"><i class="fas fa-plus"></i> Thêm Hạ Tầng</button></div>
+                <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
+                    <table class="table table-hover table-striped m-0 align-middle">
+                        <thead class="table-light sticky-top"><tr><th>Mã điểm</th><th>Tên điểm</th><th>Tọa độ X | Y</th><th>Phân loại</th><th>Thao tác</th></tr></thead>
+                        <tbody>
+                            @foreach (var item in nodes) {
+                                <tr><td><code>@item.NodeId</code></td><td class="fw-bold">@item.NodeName</td><td class="small text-muted">@item.X | @item.Y</td><td><span class="badge @((item.NodeType??"").ToLower().Contains("depot")?"bg-primary":"bg-success")">@item.NodeType</span></td><td><a asp-action="DeleteNode" asp-route-id="@item.Id" class="text-danger" onclick="return confirm('Xóa hạ tầng này?')"><i class="fas fa-trash"></i></a></td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalAddDriver" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form asp-action="CreateDriver" method="post" class="modal-content"><div class="modal-header bg-primary text-white"><h5 class="modal-title">Thêm nhân viên</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label small fw-bold">Họ và Tên</label><input type="text" name="Name" class="form-control" required /></div><div class="mb-3"><label class="form-label small fw-bold">Số điện thoại</label><input type="text" name="Phone" class="form-control" /></div><div class="mb-3"><label class="form-label small fw-bold">Biển số xe</label><input type="text" name="VehicleLicense" class="form-control" required /></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Lưu</button></div></form></div></div>
+<div class="modal fade" id="modalEditDriver" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form asp-action="EditDriver" method="post" class="modal-content"><input type="hidden" id="editDriverId" name="Id" /><div class="modal-header bg-warning"><h5 class="modal-title fw-bold">Sửa tài xế</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label small fw-bold">Họ và Tên</label><input type="text" id="editDriverName" name="Name" class="form-control" required /></div><div class="mb-3"><label class="form-label small fw-bold">Số điện thoại</label><input type="text" id="editDriverPhone" name="Phone" class="form-control" /></div><div class="mb-3"><label class="form-label small fw-bold">Biển số xe</label><input type="text" id="editDriverLicense" name="VehicleLicense" class="form-control" required /></div><div class="mb-3"><label class="form-label small fw-bold">Trạng thái</label><select id="editDriverActive" name="IsActive" class="form-select"><option value="true">Sẵn sàng</option><option value="false">Đang bận</option></select></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-warning fw-bold">Cập nhật</button></div></form></div></div>
+<div class="modal fade" id="modalAddCustomer" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form asp-action="CreateCustomer" method="post" class="modal-content"><div class="modal-header bg-danger text-white"><h5 class="modal-title">Thêm khách hàng</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label small fw-bold">Tên cửa hàng</label><input type="text" name="Name" class="form-control" required /></div><div class="mb-3"><label class="form-label small fw-bold">Địa chỉ chi tiết</label><input type="text" id="addCustAddress" name="Address" class="form-control" required /></div><div class="row"><div class="col-6 mb-3"><label class="form-label small fw-bold">Vĩ độ (Lat)</label><input type="number" step="any" id="addCustLat" name="Latitude" class="form-control" required /></div><div class="col-6 mb-3"><label class="form-label small fw-bold">Kinh độ (Lng)</label><input type="number" step="any" id="addCustLng" name="Longitude" class="form-control" required /></div></div><div class="row"><div class="col-6 mb-3"><label class="form-label small fw-bold">Khối lượng (kg)</label><input type="number" step="any" name="Demand" class="form-control" value="10" required /></div><div class="col-6 mb-3"><label class="form-label small fw-bold">Khung giờ</label><input type="text" name="TimeWindow" class="form-control" value="08:00 - 17:00" /></div></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-danger">Lưu</button></div></form></div></div>
+<div class="modal fade" id="modalEditCustomer" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form asp-action="EditCustomer" method="post" class="modal-content"><input type="hidden" id="editCustId" name="Id" /><div class="modal-header bg-warning"><h5 class="modal-title fw-bold">Sửa khách hàng</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label small fw-bold">Tên khách hàng</label><input type="text" id="editCustName" name="Name" class="form-control" required /></div><div class="mb-3"><label class="form-label small fw-bold">Địa chỉ</label><input type="text" id="editCustAddress" name="Address" class="form-control" required /></div><div class="row"><div class="col-6 mb-3"><label class="form-label small fw-bold">Vĩ độ</label><input type="number" step="any" id="editCustLat" name="Latitude" class="form-control" required /></div><div class="col-6 mb-3"><label class="form-label small fw-bold">Kinh độ</label><input type="number" step="any" id="editCustLng" name="Longitude" class="form-control" required /></div></div><div class="row"><div class="col-6 mb-3"><label class="form-label small fw-bold">Khối lượng (kg)</label><input type="number" step="any" id="editCustDemand" name="Demand" class="form-control" required /></div><div class="col-6 mb-3"><label class="form-label small fw-bold">Khung giờ</label><input type="text" id="editCustTime" name="TimeWindow" class="form-control" /></div></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-warning fw-bold">Cập nhật</button></div></form></div></div>
+<div class="modal fade" id="modalAddNode" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form asp-action="CreateNode" method="post" class="modal-content"><div class="modal-header bg-dark text-white"><h5 class="modal-title">Thêm hạ tầng</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label small fw-bold">Mã điểm</label><input type="text" name="NodeId" class="form-control" required /></div><div class="mb-3"><label class="form-label small fw-bold">Tên địa điểm</label><input type="text" name="NodeName" class="form-control" required /></div><div class="row"><div class="col-6 mb-3"><label class="form-label small fw-bold">Tọa độ X</label><input type="number" step="any" name="X" class="form-control" required /></div><div class="col-6 mb-3"><label class="form-label small fw-bold">Tọa độ Y</label><input type="number" step="any" name="Y" class="form-control" required /></div></div><div class="mb-3"><label class="form-label small fw-bold">Phân loại</label><select name="NodeType" class="form-select"><option value="Station">Station (Trạm sạc)</option><option value="Depot">Depot (Nhà kho)</option></select></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-dark">Lưu</button></div></form></div></div>
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('adminMap').setView([18.6734, 105.6813], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        var isPickingMode = false;
+        var nodesData = @Html.Raw(Json.Serialize(nodes));
+        nodesData.forEach(function(node) {
+            var lat = 18.673 + (node.y * 0.0005); var lng = 105.681 + (node.x * 0.0005);
+            var color = (node.nodeType || "").toLowerCase().includes("depot") ? "blue" : "green";
+            L.circleMarker([lat, lng], { radius: 9, fillColor: color, color: "#fff", weight: 2, fillOpacity: 1 }).addTo(map).bindPopup(`<b>${node.nodeName}</b>`);
+        });
+
+        var customersData = @Html.Raw(Json.Serialize(customers));
+        customersData.forEach(function(cust) { 
+            let fillColor = cust.isDelivered ? "#198754" : "#dc3545"; // Đổi màu xanh nếu đã giao xong
+            L.circleMarker([cust.latitude, cust.longitude], { radius: 8, fillColor: fillColor, color: "#fff", weight: 2, fillOpacity: 0.9 }).addTo(map).bindPopup(`<b>Khách hàng: ${cust.name}</b><br>Tình trạng: ${cust.isDelivered ? "Đã giao" : "Chưa giao"}`); 
+        });
+
+        function startMapPicking() { isPickingMode = true; document.getElementById('mapPickingAlert').classList.remove('d-none'); document.getElementById('mapPickingAlert').classList.add('d-flex'); document.getElementById('adminMap').classList.add('picking-location'); document.getElementById('mapBadgeState').innerText = "Đang chọn..."; }
+        function cancelMapPicking() { isPickingMode = false; document.getElementById('mapPickingAlert').classList.remove('d-flex'); document.getElementById('mapPickingAlert').classList.add('d-none'); document.getElementById('adminMap').classList.remove('picking-location'); document.getElementById('mapBadgeState').innerText = "Chế độ xem"; }
+
+        map.on('click', function(e) {
+            if (!isPickingMode) return;
+            document.getElementById('addCustLat').value = e.latlng.lat.toFixed(6);
+            document.getElementById('addCustLng').value = e.latlng.lng.toFixed(6);
+            document.getElementById('addCustAddress').value = "Tọa độ: " + e.latlng.lat.toFixed(4) + ", " + e.latlng.lng.toFixed(4);
+            cancelMapPicking();
+            new bootstrap.Modal(document.getElementById('modalAddCustomer')).show();
+        });
+
+        function openEditDriverModal(id, name, phone, license, isActive) { document.getElementById('editDriverId').value = id; document.getElementById('editDriverName').value = name; document.getElementById('editDriverPhone').value = phone; document.getElementById('editDriverLicense').value = license; document.getElementById('editDriverActive').value = isActive; new bootstrap.Modal(document.getElementById('modalEditDriver')).show(); }
+        function openEditCustomerModal(id, name, address, lat, lng, demand, timeWindow) { document.getElementById('editCustId').value = id; document.getElementById('editCustName').value = name; document.getElementById('editCustAddress').value = address; document.getElementById('editCustLat').value = lat; document.getElementById('editCustLng').value = lng; document.getElementById('editCustDemand').value = demand; document.getElementById('editCustTime').value = timeWindow; new bootstrap.Modal(document.getElementById('modalEditCustomer')).show(); }
+    </script>
+}

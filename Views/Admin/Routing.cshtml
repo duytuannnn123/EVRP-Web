@@ -1,0 +1,307 @@
+@using EVRP_Web.Models
+@model List<EVRP_Web.Models.Route>
+
+@{
+    ViewData["Title"] = "Trung tâm điều phối lộ trình EVRP";
+    var allCustomers = ViewBag.AllCustomers as IEnumerable<EVRP_Web.Models.Customer> ?? new List<Customer>();
+}
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
+<style>
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; }
+    .dashboard-container { padding: 24px; }
+    .main-title { font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
+    .control-panel { background: #ffffff; border-radius: 16px; padding: 24px; height: 100%; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0; }
+    .section-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 12px; }
+    .input-vehicle-group { border-radius: 10px; overflow: hidden; border: 1px solid #cbd5e1; }
+    .input-vehicle-group input { border: none; padding: 12px; font-weight: 600; }
+    .btn-action-run { width: 100%; padding: 14px; border-radius: 12px; font-weight: 600; border: none; transition: all 0.2s ease-in-out; }
+    .btn-status-calculating { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+    .btn-status-ready { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; cursor: pointer; }
+    .driver-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+    .map-wrapper { background: #ffffff; border-radius: 16px; padding: 12px; height: 600px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0; margin-bottom: 24px; }
+    #leafMap { height: 100%; width: 100%; border-radius: 12px; }
+    .log-wrapper { background: #ffffff; border-radius: 16px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    .table-custom { width: 100%; margin-bottom: 0; }
+    .table-custom th { background: #f8fafc; color: #475569; font-weight: 600; font-size: 0.85rem; padding: 12px 16px; border-bottom: 2px solid #e2e8f0; }
+    .table-custom td { padding: 14px 16px; font-size: 0.9rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .badge-status { padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    .badge-delivery { background-color: #dcfce7; color: #15803d; }
+    .badge-charging { background-color: #fef9c3; color: #a16207; }
+    .car-container { position: relative; text-align: center; }
+    .battery-status { position: absolute; top: -36px; left: 50%; transform: translateX(-50%); width: 38px; height: 7px; background: #e2e8f0; border: 1px solid #475569; border-radius: 2px; }
+    .battery-level { height: 100%; background: #22c55e; width: 100%; transition: width 0.3s; }
+    .battery-text { position: absolute; top: -16px; width: 100%; font-size: 9px; font-weight: bold; color: #1e293b; }
+    .leaflet-routing-container { display: none !important; }
+</style>
+
+<div class="container-fluid dashboard-container text-start">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="main-title mb-1"><i class="fas fa-route text-primary me-2"></i>Bản Đồ Điều Phối Lộ Trình Xe Điện Giao Hàng</h2>
+            <p class="text-muted small mb-0">Hệ thống đồng bộ dữ liệu chặng cuối: Cập nhật trạng thái giao hàng thực tế từ bản đồ vào trực tiếp SQL MySQL</p>
+        </div>
+        <div>
+            <a asp-action="Management" class="btn btn-outline-primary fw-bold rounded-3"><i class="fas fa-tasks me-1"></i> Sang Trang Quản Lý Danh Mục</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xl-3 col-lg-4 mb-4">
+            <div class="control-panel">
+                <div class="section-label"><i class="fas fa-sliders-h me-1"></i> Cấu hình đội xe</div>
+                <div class="mb-4">
+                    <label class="form-label small fw-semibold text-secondary">Số lượng xe vận hành:</label>
+                    <div class="input-group input-vehicle-group shadow-sm">
+                        <span class="input-group-text bg-white border-0 text-muted"><i class="fas fa-truck"></i></span>
+                        <input type="number" id="vehicleInput" class="form-control" value="@Model.Count" min="1">
+                        <button class="btn btn-primary px-3 fw-bold" onclick="changeVehicleCount()">Cập nhật</button>
+                    </div>
+                </div>
+
+                <button id="startBtn" class="btn-action-run btn-status-calculating mb-4" onclick="runSimulation()" disabled>
+                    <i class="fas fa-spinner fa-spin me-2"></i>HỆ THỐNG ĐANG TÍNH LỘ TRÌNH...
+                </button>
+
+                <div class="section-label">Trạng thái pin đội xe hiện hành</div>
+                <div id="fleetStatus" class="overflow-auto" style="max-height: 320px;">
+                    @for (int i = 0; i < Model.Count; i++)
+                    {
+                        <div class="driver-card shadow-sm">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-bold text-dark" style="font-size: 0.95rem;"><i class="fa fa-user-circle text-primary me-2 fa-lg"></i>@Model[i].DriverName</span>
+                                <span id="list-bat-@i" class="badge bg-success font-monospace">100%</span>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted" style="font-size: 0.8rem;">
+                                <span><i class="far fa-clock me-1"></i>Xuất phát: <span id="list-time-@i" class="fw-bold">08:00</span></span>
+                                <span>Lộ trình: <b class="text-primary"> Tuyến #@(i+1)</b></span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-9 col-lg-8">
+            <div class="map-wrapper"><div id="leafMap"></div></div>
+            <div class="log-wrapper">
+                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-history text-secondary me-2"></i>Nhật Ký Vận Hành Giao Hàng & Sạc Pin Tức Thời</h5>
+                <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                    <table class="table table-custom table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Tài xế lái xe</th>
+                                <th>Điểm dừng hành trình</th>
+                                <th>Thời gian giao thực tế</th>
+                                <th>Trạng thái bàn giao</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deliveryLogBody">
+                            <tr><td colspan="4" class="text-center text-muted py-4">Hệ thống sẵn sàng. Vui lòng bấm kích hoạt lệnh phát xe mô phỏng...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <script>
+        const allStations = @Html.Raw(Json.Serialize(ViewBag.AllStations));
+        const routesData = @Html.Raw(Json.Serialize(Model));
+        const customersInDb = @Html.Raw(Json.Serialize(allCustomers));
+        let map, routingControls = [], carMarkers = [];
+        const routeColors = ['#2563eb', '#16a34a', '#ea580c', '#dc2626', '#9333ea', '#0d9488', '#334155'];
+
+        function initMap() {
+            map = L.map('leafMap').setView([18.6734, 105.6813], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+            if (allStations) {
+                allStations.forEach(s => {
+                    let lat = 18.673 + (s.y * 0.0005);
+                    let lng = 105.681 + (s.x * 0.0005);
+                    if ((s.nodeType || "").toLowerCase().includes("depot")) {
+                        L.marker([lat, lng], { icon: L.divIcon({ html: '<i class="fas fa-warehouse text-primary fa-lg"></i>', className: 'dummy', iconSize: [30, 30] }) }).addTo(map).bindPopup(`<b>Kho trung tâm:</b> ${s.nodeName}`);
+                    } else {
+                        L.marker([lat, lng], { icon: L.divIcon({ html: '<i class="fas fa-charging-station text-success fa-lg"></i>', className: 'dummy', iconSize: [30, 30] }) }).addTo(map).bindPopup(`<b>Trạm sạc điện:</b> ${s.nodeName}`);
+                    }
+                });
+            }
+
+            if (customersInDb) {
+                customersInDb.forEach(c => {
+                    L.marker([c.latitude, c.longitude], { icon: L.divIcon({ html: '<i class="fas fa-map-marker-alt text-danger fa-lg"></i>', className: 'dummy', iconSize: [25, 25] }) }).addTo(map).bindPopup(`<b>Khách hàng:</b> ${c.name}<br>Khối lượng: ${c.demand} kg`);
+                });
+            }
+
+            let totalRoutesToLoad = routesData ? routesData.length : 0;
+            let loaded = 0;
+            if (totalRoutesToLoad === 0) return;
+
+            routesData.forEach((route, rIdx) => {
+                if(!route.nodes || route.nodes.length === 0) return;
+
+                const waypoints = route.nodes.map(n => {
+                    const type = (n.nodeType || "").toLowerCase();
+                    let nX = n.X !== undefined ? n.X : n.x;
+                    let nY = n.Y !== undefined ? n.Y : n.y;
+                    if (type.includes("customer")) return L.latLng(nX, nY);
+                    else return L.latLng(18.673 + (nY * 0.0005), 105.681 + (nX * 0.0005));
+                });
+
+                const control = L.Routing.control({
+                    waypoints: waypoints,
+                    lineOptions: { styles: [{ color: routeColors[rIdx % routeColors.length], weight: 5, opacity: 0.85 }] },
+                    createMarker: () => null,
+                    addWaypoints: false,
+                    show: false,
+                    router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' })
+                }).addTo(map);
+
+                control.on('routesfound', function() { loaded++; if (loaded === totalRoutesToLoad) unlockStartAction(); });
+                control.on('routingerror', function() { loaded++; if (loaded === totalRoutesToLoad) unlockStartAction(); });
+                routingControls.push(control);
+            });
+        }
+
+        function unlockStartAction() {
+            const btn = document.getElementById('startBtn');
+            if (btn && btn.disabled) {
+                btn.disabled = false;
+                btn.className = "btn-action-run btn-status-ready shadow";
+                btn.innerHTML = '<i class="fas fa-play-circle me-2"></i>BẮT ĐẦU VẬN HÀNH MÔ PHỎNG';
+            }
+        }
+
+        async function runSimulation() {
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('deliveryLogBody').innerHTML = ''; 
+            carMarkers.forEach(m => map.removeLayer(m));
+            carMarkers = [];
+
+            const movePromises = routingControls.map((ctrl, i) => {
+                const routeResult = ctrl._selectedRoute;
+                if (routeResult && routeResult.coordinates) {
+                    return animateCar(routeResult.coordinates, i, routesData[i].nodes, routesData[i].driverName);
+                } else {
+                    const fallbackPath = routesData[i].nodes.map(n => {
+                        let nX = n.X !== undefined ? n.X : n.x;
+                        let nY = n.Y !== undefined ? n.Y : n.y;
+                        if ((n.nodeType || "").toLowerCase().includes("customer")) return L.latLng(nX, nY);
+                        return L.latLng(18.673 + (nY * 0.0005), 105.681 + (nX * 0.0005));
+                    });
+                    return animateCar(fallbackPath, i, routesData[i].nodes, routesData[i].driverName);
+                }
+            });
+
+            await Promise.all(movePromises);
+            document.getElementById('startBtn').disabled = false;
+        }
+
+        function animateCar(path, vehicleIdx, nodes, driverName) {
+            return new Promise((resolve) => {
+                if(!path || path.length === 0) return resolve();
+                const carMarker = L.marker(path[0], {
+                    icon: L.divIcon({ html: `<div class="car-container"><div class="battery-text" id="bat-txt-${vehicleIdx}">100%</div><div class="battery-status"><div id="bat-fill-${vehicleIdx}" class="battery-level"></div></div><i class="fas fa-truck-moving fa-2x" style="color:#1e293b"></i></div>`, className: 'dummy', iconSize: [45, 45] }), zIndexOffset: 2000
+                }).addTo(map);
+                carMarkers.push(carMarker);
+
+                let localStep = 0, currentBattery = 100, localVisited = new Set();
+                const localStations = allStations ? allStations.map(s => { return { name: s.nodeName, latlng: L.latLng(18.673 + (s.y * 0.0005), 105.681 + (s.x * 0.0005)) }; }) : [];
+
+                function frame() {
+                    if (localStep < path.length) {
+                        const currentPos = path[localStep];
+                        carMarker.setLatLng(currentPos);
+                        currentBattery -= 0.04;
+                        let displayMinutes = 480;
+
+                        // TĂNG BÁN KÍNH QUÉT LÊN 250m ĐỂ KHÔNG BAO GIỜ BỎ SÓT LỊCH TRÌNH
+                        localStations.forEach((st, s_index) => {
+                            const key = `v${vehicleIdx}_s${s_index}`;
+                            if (L.latLng(currentPos).distanceTo(st.latlng) < 250 && !localVisited.has(key)) {
+                                currentBattery = 100; localVisited.add(key);
+                                const stationNode = nodes.find(n => (n.nodeType || "").toLowerCase().includes("station") && (n.nodeName === st.name || n.NodeName === st.name));
+                                const stName = stationNode ? (stationNode.nodeName || stationNode.NodeName) : st.name;
+                                const chargeTime = stationNode ? stationNode.startTime : 480;
+                                addLogEntry(driverName, stName, formatTime(chargeTime), '<span class="badge-status badge-charging"><i class="fas fa-bolt"></i> Đang sạc pin</span>');
+                            }
+                        });
+
+                        nodes.forEach((node, nIdx) => {
+                            const typeStr = (node.nodeType || node.NodeType || "").toLowerCase();
+                            if (nIdx === 0 || nIdx === nodes.length - 1 || !typeStr.includes("customer")) return;
+                            
+                            const key = `v${vehicleIdx}_n${nIdx}`;
+                            let nX = node.X !== undefined ? node.X : node.x;
+                            let nY = node.Y !== undefined ? node.Y : node.y;
+                            
+                            // Quét độ nhạy cao 250m
+                            if (L.latLng(currentPos).distanceTo(L.latLng(nX, nY)) < 250 && !localVisited.has(key)) {
+                                localVisited.add(key);
+                                displayMinutes = node.startTime || 480;
+                                
+                                const timeStr = formatTime(displayMinutes);
+                                const custName = node.nodeName || node.NodeName || "Khách hàng";
+                                const custId = node.id || node.Id;
+                                
+                                addLogEntry(driverName, custName, timeStr, '<span class="badge-status badge-delivery"><i class="fas fa-check-circle"></i> Bàn giao thành công</span>');
+                                
+                                // Gửi lệnh API AJAX chốt sổ Database
+                                sendDeliveryStatusToDatabase(custId, timeStr);
+                            }
+                        });
+
+                        updateCarUI(vehicleIdx, currentBattery, displayMinutes);
+                        localStep += 2; setTimeout(frame, 25);
+                    } else { resolve(); }
+                }
+                frame();
+            });
+        }
+
+        function sendDeliveryStatusToDatabase(id, timeString) {
+            if (!id) return;
+            fetch(`/Admin/UpdateDeliveryStatus?customerId=${id}&deliveryTime=${encodeURIComponent(timeString)}`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) { console.log("✅ Cập nhật SQL thành công: " + data.message); }
+                else { console.error("❌ Lỗi MySQL: " + data.message); }
+            }).catch(error => console.error("Network Error:", error));
+        }
+
+        function addLogEntry(driverName, locationName, time, statusHtml) {
+            const body = document.getElementById('deliveryLogBody');
+            const row = document.createElement('tr');
+            row.innerHTML = `<td class="fw-semibold"><i class="fa fa-user text-muted me-2"></i>${driverName}</td><td class="fw-bold text-dark">${locationName}</td><td class="text-primary fw-bold font-monospace"><i class="far fa-clock me-1"></i>${time}</td><td>${statusHtml}</td>`;
+            body.insertBefore(row, body.firstChild);
+        }
+
+        function updateCarUI(idx, bat, time) {
+            const batInt = Math.max(0, Math.floor(bat));
+            if (document.getElementById(`bat-fill-${idx}`)) document.getElementById(`bat-fill-${idx}`).style.width = batInt + "%";
+            if (document.getElementById(`bat-txt-${idx}`)) document.getElementById(`bat-txt-${idx}`).innerText = batInt + "%";
+            if (document.getElementById(`list-bat-${idx}`)) { document.getElementById(`list-bat-${idx}`).innerText = batInt + "%"; document.getElementById(`list-bat-${idx}`).className = batInt < 35 ? "badge bg-danger" : "badge bg-success"; }
+            if (document.getElementById(`list-time-${idx}`)) document.getElementById(`list-time-${idx}`).innerText = formatTime(Math.floor(time));
+        }
+
+        function formatTime(min) { return `${Math.floor(min / 60).toString().padStart(2, '0')}:${Math.floor(min % 60).toString().padStart(2, '0')}`; }
+        function changeVehicleCount() { window.location.href = window.location.origin + window.location.pathname + "?vehicleCount=" + document.getElementById('vehicleInput').value; }
+
+        window.onload = function() {
+            initMap();
+            setTimeout(function() {
+                const btn = document.getElementById('startBtn');
+                if (btn && btn.disabled) { unlockStartAction(); btn.innerHTML = '<i class="fas fa-play-circle text-warning me-2"></i>BẮT ĐẦU VẬN HÀNH (Chế độ dự phòng)'; }
+            }, 1500); 
+        };
+    </script>
+}

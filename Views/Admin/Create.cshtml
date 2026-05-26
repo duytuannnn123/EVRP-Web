@@ -1,0 +1,76 @@
+@model EVRP_Web.Models.Node
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<div class="container mt-4">
+    <h4>Thêm điểm mới (Kho/Khách hàng/Trạm sạc)</h4>
+    <hr />
+    <div class="row">
+        <div class="col-md-4">
+            <form asp-action="Create">
+                <div class="form-group mb-3">
+                    <label class="control-label">Tên điểm</label>
+                    <input asp-for="NodeName" class="form-control" placeholder="VD: Khách hàng A" required />
+                </div>
+                <div class="form-group mb-3">
+                    <label class="control-label">Loại điểm</label>
+                    <select asp-for="NodeType" class="form-select">
+                        <option value="Customer">Khách hàng</option>
+                        <option value="Depot">Kho hàng</option>
+                        <option value="Station">Trạm sạc</option>
+                    </select>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col">
+                        <label>Tọa độ X (Lng)</label>
+                        <input asp-for="X" id="coordX" class="form-control" readonly />
+                    </div>
+                    <div class="col">
+                        <label>Tọa độ Y (Lat)</label>
+                        <input asp-for="Y" id="coordY" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Lưu điểm</button>
+                    <a asp-action="Index" class="btn btn-secondary">Hủy</a>
+                </div>
+            </form>
+        </div>
+        <div class="col-md-8">
+            <label class="fw-bold mb-2">Click vào bản đồ để chọn vị trí:</label>
+            <div id="mapSelector" style="height: 450px; border-radius: 15px; border: 2px solid #ddd;"></div>
+            <p class="text-muted small mt-2"><i class="fas fa-info-circle"></i> Bạn có thể phóng to và click chính xác vào vị trí mong muốn.</p>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Khởi tạo map tại TP Vinh
+        var map = L.map('mapSelector').setView([18.673, 105.681], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        var currentMarker;
+
+        map.on('click', function(e) {
+            var lat = e.latlng.lat;
+            var lng = e.latlng.lng;
+
+            // Xóa marker cũ nếu có
+            if (currentMarker) map.removeLayer(currentMarker);
+
+            // Thêm marker mới tại điểm click
+            currentMarker = L.marker([lat, lng]).addTo(map);
+
+            // Chuyển đổi ngược lại hệ tọa độ X,Y của bạn
+            // (18.673 + Y * 0.0005 = lat) => Y = (lat - 18.673) / 0.0005
+            var calcX = (lng - 105.681) / 0.0005;
+            var calcY = (lat - 18.673) / 0.0005;
+
+            document.getElementById('coordX').value = calcX.toFixed(2);
+            document.getElementById('coordY').value = calcY.toFixed(2);
+        });
+    </script>
+}

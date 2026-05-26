@@ -1,0 +1,32 @@
+@model IEnumerable<EVRP_Web.Models.Customer>
+
+<div class="container mt-4">
+    <h2><i class="fa fa-map-marker"></i> Danh Sách Điểm Khách Hàng</h2>
+    <button class="btn btn-primary mb-3">Thêm Khách Hàng Mới</button>
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Tên Khách Hàng</th>
+                <th>Địa Chỉ</th>
+                <th>Tọa Độ (Lat; Long)</th>
+                <th>Khối Lượng (Kg)</th>
+                <th>Hành Động</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var cust in Model)
+            {
+                <tr>
+                    <td><b>@cust.Name</b></td>
+                    <td>@cust.Address</td>
+                    <td>@cust.Latitude ; @cust.Longitude</td>
+                    <td>@cust.Demand kg</td>
+                    <td>
+                        <a class="text-primary me-2"><i class="fa fa-edit"></i></a>
+                        <a class="text-danger"><i class="fa fa-trash"></i></a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
